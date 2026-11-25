@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step 4: Quotation &amp; Accounting Ledger — JobShop Quote Engine</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231E3A5F'><rect width='24' height='24' rx='4'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='%23FAF9F6' font-family='monospace' font-size='12' font-weight='bold'>JS</text></svg>">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+
+  <main class="page-container">
+    <div id="job-status-bar" class="job-status-bar"></div>
+
+    <div class="page-intro">
+      <div>
+        <h2>Step 4 &mdash; Commercial Quotation &amp; Double-Entry Sales Ledger</h2>
+        <p>Finalize customer quotation terms, recognize credit sales upon client acceptance, and audit synchronized Journal, T-Accounts, and Trial Balance.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" class="btn" id="btn-clear-ledger">Clear Ledger History</button>
+        <button type="button" class="btn btn-primary" id="btn-print-ledger">Print / Save Quote &amp; Ledger (PDF)</button>
+      </div>
+    </div>
+
+    <div id="ledger-feedback" class="callout" style="display:none;"></div>
+
+    <!-- TOP ROW: COMMERCIAL QUOTATION + ACCOUNTING EVENT TRIGGERS -->
+    <div class="grid-2-wide-left">
+      <div class="card">
+        <div class="card-header">
+          <h3>Commercial Quotation Document</h3>
+          <span id="quote-accept-status" class="badge badge-navy">DRAFT QUOTATION</span>
+        </div>
+        <div class="card-body">
+          <div class="form-grid-3 no-print" style="margin-bottom: 14px;">
+            <div class="field">
+              <label for="qtn-workshop-name">Workshop Header Name</label>
+              <input type="text" id="qtn-workshop-name">
+            </div>
+            <div class="field">
+              <label for="qtn-id">Quotation Number</label>
+              <input type="text" id="qtn-id">
+            </div>
+            <div class="field">
+              <label for="qtn-customer">Bill-To Customer</label>
+              <input type="text" id="qtn-customer">
+            </div>
+            <div class="field">
+              <label for="qtn-date">Quotation Date</label>
+              <input type="date" id="qtn-date">
+            </div>
+            <div class="field">
+              <label for="qtn-validity">Validity (Days)</label>
+              <input type="number" id="qtn-validity" min="1" step="1">
+            </div>
+            <div class="field">
+              <label for="qtn-gst-rate">GST Tax Rate</label>
+              <select id="qtn-gst-rate">
+                <option value="0">0% (Tax Excluded / Textbook Benchmark)</option>
+                <option value="5">5% GST</option>
+                <option value="12">12% GST</option>
+                <option value="18">18% GST</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="quote-paper">
+            <div class="quote-top">
+              <div>
+                <div style="font-size: 16px; font-weight: 700;" id="qtn-display-workshop">Precision Fab Workshop</div>
+                <div class="muted-note" id="qtn-display-tagline">Additive Prototyping &amp; CNC Machining Services</div>
+                <div class="muted-note" id="qtn-display-gstin"></div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 15px; font-weight: 700; color: var(--ink-navy);">COMMERCIAL QUOTATION</div>
+                <div class="muted-note">Quote No: <strong id="qtn-display-id"></strong></div>
+                <div class="muted-note">Date: <span id="qtn-display-date"></span> | Valid: <span id="qtn-display-valid"></span></div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 12px; font-size: 13px;">
+              <strong>To:</strong> <span id="qtn-display-customer"></span> &nbsp;&bull;&nbsp;
+              <strong>Job Ref:</strong> <span id="qtn-display-job"></span>
+            </div>
+
+            <div class="table-wrap">
+              <table class="sheet">
+                <thead>
+                  <tr>
+                    <th>Item Description &amp; Specification</th>
+                    <th class="num">Qty &amp; Unit Rate</th>
+                    <th class="num">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="qtn-items-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNTING DISPATCH ACTIONS -->
+      <div class="no-print">
+        <div class="card">
+          <div class="card-header">
+            <h3>Order Acceptance &amp; Settlement Actions</h3>
+            <span class="badge">Module 1 &bull; Double-Entry</span>
+          </div>
+          <div class="card-body">
+            <p class="muted-note" style="margin-top:0;">
+              Confirming client acceptance executes an accrual credit sale: debiting <strong>Sundry Debtors</strong> and crediting <strong>Sales Revenue</strong> (and Output GST if enabled).
+            </p>
+            <button type="button" id="btn-accept-quote" class="btn btn-success" style="width: 100%; padding: 10px;">
+              Accept Quotation &amp; Post Credit Sale Entry
+            </button>
+
+            <hr style="border:0; border-top:1px solid var(--border-light); margin: 16px 0;">
+
+            <h4 style="margin: 0 0 8px 0; font-size: 13px;">Record Customer Payment Receipt</h4>
+            <div class="form-grid">
+              <div class="field">
+                <label for="rcpt-amount">Amount Received (₹)</label>
+                <input type="number" id="rcpt-amount" step="0.01" min="0.01">
+              </div>
+              <div class="field">
+                <label for="rcpt-mode">Settlement Account</label>
+                <select id="rcpt-mode">
+                  <option value="NEFT / Bank Transfer">Bank Transfer (NEFT / RTGS)</option>
+                  <option value="Cheque">Bank Cheque</option>
+                  <option value="Cash">Cash Receipt</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="rcpt-date">Receipt Date</label>
+                <input type="date" id="rcpt-date">
+              </div>
+              <div class="field">
+                <label for="rcpt-ref">Transaction Ref</label>
+                <input type="text" id="rcpt-ref" placeholder="NEFT-1042">
+              </div>
+            </div>
+            <button type="button" id="btn-post-receipt" class="btn btn-primary" style="width: 100%;">
+              Post Receipt (Bank Dr. / Sundry Debtors Cr.)
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0;">
+          <div class="kpi-tile">
+            <div class="kpi-label">Sundry Debtors Bal.</div>
+            <div class="kpi-value" id="kpi-debtors">₹0.00</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Sales Revenue</div>
+            <div class="kpi-value" id="kpi-sales">₹0.00</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Bank / Cash Collected</div>
+            <div class="kpi-value" id="kpi-cash">₹0.00</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Trial Balance Check</div>
+            <div class="kpi-value" style="font-size: 14px;" id="kpi-tb-status">No Postings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JOURNAL ENTRIES TABLE -->
+    <div class="card">
+      <div class="card-header">
+        <h3>General Journal Register</h3>
+        <span class="badge">Chronological Daybook</span>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="sheet">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Entry ID</th>
+                <th>Particulars &amp; Account Heads</th>
+                <th class="num">Debit (₹)</th>
+                <th class="num">Credit (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="journal-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- T-ACCOUNTS GRID -->
+    <div class="card">
+      <div class="card-header">
+        <h3>General Ledger Accounts (T-Accounts)</h3>
+        <span class="badge">Balanced c/d Totals</span>
+      </div>
+      <div class="card-body">
+        <div id="t-accounts-container" class="t-accounts-grid"></div>
+      </div>
+    </div>
+
+    <!-- TRIAL BALANCE RECONCILIATION -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Trial Balance Reconciliation</h3>
+        <span class="badge badge-forest">&Sigma; Debits &equiv; &Sigma; Credits</span>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="sheet">
+            <thead>
+              <tr>
+                <th>Account Head</th>
+                <th>Account Classification</th>
+                <th class="num">Debit Balance (₹)</th>
+                <th class="num">Credit Balance (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="trial-balance-tbody"></tbody>
+          </table>
+        </div>
+        <div class="section-actions">
+          <a href="batch.html" class="btn">&larr; Back to EBQ &amp; Make-or-Buy</a>
+          <a href="index.html" class="btn">Start New Job Estimate</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/cost-engine.js"></script>
+  <script src="js/ledger-engine.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/pages/page-ledger.js"></script>
+</body>
+</html>

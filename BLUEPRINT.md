@@ -1,271 +1,105 @@
 # Technical Architecture & Implementation Blueprint
 
 ## Project: JobShop Quote Engine
-**Document Version:** 1.0.0  
-**Target Environment:** Python 3.9+ / Streamlit Engine  
-**Module Integration:** Additive Geometry Analysis, Cost Hierarchy Engine, EBQ Optimizer, Automated Double-Entry Bookkeeping  
+**Document Version:** 2.0.0  
+**Architecture:** Multi-Page Static Web Application (HTML5 / CSS3 / Modular JavaScript)  
+**CAD Processing Library:** Three.js `r128` (`STLLoader`, `OrbitControls`)  
+**State Persistence:** Browser `localStorage` Synchronized Pipeline (`js/state.js`)
 
 ---
 
-## 1. Architectural Philosophy
-The **JobShop Quote Engine** is built upon a modular, decoupled architecture where each computational layer maintains strict single-responsibility boundaries:
-1. **Geometric Core (`src/geometry_engine.py`):** Pure mathematical functions parsing facet meshes into volumetric, mass, and time physical primitives.
-2. **Cost Calculation Engine (`src/cost_engine.py`):** Deterministic accounting pipeline executing hierarchical cost aggregation and margin/markup conversions.
-3. **Batch Optimization Engine (`src/batch_engine.py`):** Analytical optimization module computing Economic Batch Quantities and generating cost-tradeoff matrices.
-4. **Financial Ledger Engine (`src/ledger_engine.py`):** State-machine driven double-entry bookkeeping engine validating debit-credit equilibrium upon commercial transaction triggers.
-5. **Presentation Layer (`app.py`):** Interactive, reactive Streamlit dashboard orchestrating the user experience with dual-mode ingestion (CAD File Upload vs. Manual Textbook Benchmark Mode).
+## 1. Architectural Overview
+
+The application is structured as four focused HTML pages backed by four independent, pure-JavaScript computational modules that run identically in browser contexts and Node.js automated test suites:
+
+1. **`js/geometry-engine.js`** — Parses `.STL` binary/ASCII buffers via `THREE.STLLoader` (and pure buffer inspection in headless tests), computes exact signed tetrahedra volume, surface area, bounding dimensions, 3D print material/runtime estimates, and CNC billet/chip-removal runtime estimates.
+2. **`js/cost-engine.js`** — Compiles structured Job Cards and hierarchical Cost Sheets (`Prime Cost` $\to$ `Works Cost` $\to$ `Cost of Production` $\to$ `Cost of Sales` $\to$ `Quotation Price`) with support for Machine Hour Rate absorption, scrap deductions, and Cost Markup vs. Sales Margin conversions.
+3. **`js/batch-engine.js`** — Implements the Economic Batch Quantity ($\text{EBQ}$) optimizer, sensitivity schedule generator, SVG cost-curve builder, and Make-or-Buy relevant cost comparator.
+4. **`js/ledger-engine.js`** — Maintains double-entry accounting state, enforces $\sum \text{Debits} \equiv \sum \text{Credits}$ on every journal entry, closes two-sided T-Ledger accounts (`c/d`), and generates a live Trial Balance.
+5. **`js/state.js` & `js/nav.js`** — Persists workflow inputs and posted accounting entries across `index.html`, `costing.html`, `batch.html`, and `ledger.html` using `localStorage`, providing seamless multi-page transitions.
 
 ---
 
-## 2. Directory & Component Layout
+## 2. Directory Structure
 
-```
-JobShop_Quote_Engine/
-├── PRD.md                      # Formal Product Requirements Document
-├── BLUEPRINT.md                # Technical Blueprint & Engineering Specifications
-├── README.md                   # Repository Documentation & User Guide
-├── requirements.txt            # Pinned Python package dependencies
-├── app.py                      # Main Streamlit user interface entrypoint
-├── generate_sample_stl.py      # Standalone script to create binary test STL files
-├── sample_models/              # Bundled CAD test fixtures
-│   ├── mechanical_bracket.stl  # Sample structural engineering component
-│   └── calibration_cube.stl    # Standard 20x20x20mm test cube
-├── src/
-│   ├── __init__.py
-│   ├── geometry_engine.py      # STL mesh parsing, volume, and runtime calculation
-│   ├── cost_engine.py          # Multi-tier cost sheet compiler and pricing rules
-│   ├── batch_engine.py         # EBQ derivation and sensitivity table generator
-│   └── ledger_engine.py        # Double-entry journal dispatch and T-ledger state
+```text
+FCA IA-2 Jobshop/
+├── README.md
+├── PRD.md
+├── BLUEPRINT.md
+├── .gitignore
+├── index.html                      # Stage 1: CAD Upload / 3D Viewer & Process Estimator
+├── costing.html                    # Stage 2: Job Card & Hierarchical Job Cost Sheet
+├── batch.html                      # Stage 3: Batch Costing (EBQ) & Make-or-Buy Analysis
+├── ledger.html                     # Stage 4: Commercial Quotation & Double-Entry Ledger
+├── assets/
+│   ├── css/
+│   │   └── styles.css              # Warm Paper & Ink Accounting Desk stylesheet + @media print
+│   └── vendor/
+│       ├── three.min.js            # Vendored Three.js r128
+│       ├── STLLoader.js            # Three.js STLLoader
+│       └── OrbitControls.js        # Three.js OrbitControls
+├── js/
+│   ├── state.js                    # Shared state model, defaults & textbook presets
+│   ├── sample-models-data.js       # Offline base64 fallback for bundled sample STLs
+│   ├── geometry-engine.js          # STL mesh divergence & additive/CNC physics
+│   ├── cost-engine.js              # Job Card & Job Cost Sheet engine
+│   ├── batch-engine.js             # EBQ optimizer, SVG curve generator & Make-or-Buy
+│   ├── ledger-engine.js            # Journal, T-Accounts & Trial Balance engine
+│   ├── nav.js                      # Top navigation bar & active job summary banner
+│   └── pages/
+│       ├── page-input.js           # Page 1 interactions & Three.js scene
+│       ├── page-costing.js         # Page 2 interactions
+│       ├── page-batch.js           # Page 3 interactions
+│       └── page-ledger.js          # Page 4 interactions
+├── sample_models/
+│   ├── calibration_cube.stl        # 20x20x20 mm cube (8.00 cm³)
+│   ├── mechanical_bracket.stl      # L-bracket with gusset (48.12 cm³)
+│   └── cnc_flange_housing.stl      # Stepped cylindrical flange (28.57 cm³)
+├── docs/
+│   └── FCA_IA2_Proposal.docx
 └── tests/
-    ├── __init__.py
-    ├── test_geometry.py        # Tests for volume and mass derivation
-    ├── test_costing.py         # Validation against textbook cost sheet benchmarks
-    ├── test_ebq.py             # Validation of EBQ cost minimization
-    └── test_ledger.py          # Verification of debit=credit accounting integrity
+    └── run_tests.mjs               # Deterministic verification suite
 ```
 
 ---
 
-## 3. Detailed Component Specifications & Interfaces
+## 3. Core Module Contracts
 
-### 3.1 Geometric Processing Engine (`src/geometry_engine.py`)
-Responsible for reading raw STL byte streams and outputting physical parameters.
+### 3.1 `geometry-engine.js`
+* `parseStlBufferToMetrics(arrayBuffer, threeLoaderInstance?)` $\to$ `{ volumeCm3, surfaceAreaCm2, bboxMm: {x, y, z}, bboxVolumeCm3, facetCount, vertices }`
+  * When `THREE.STLLoader` is provided (browser runtime), parses triangles directly from the generated `THREE.BufferGeometry`.
+  * Includes pure `DataView` / ASCII fallback for Node testing consistency.
+* `estimateProcessParameters(metrics, options)` $\to$ `{ mode, netVolumeCm3, effectiveVolumeCm3, stockVolumeCm3, netMassG, wasteMassG, grossMassG, scrapCreditInr, materialCostInr, setupHours, runHours, totalMachineHours, workingBreakdown }`
 
-* **Class / Function Signatures:**
-  ```python
-  class MeshMetrics:
-      volume_cm3: float
-      surface_area_cm2: float
-      dimensions_xyz: tuple[float, float, float]
-      facet_count: int
-      is_watertight: bool
+### 3.2 `cost-engine.js`
+* `calculateJobCostSheet(params)` $\to$ `{ quantity, unitPrice, directMaterialGross, scrapCredit, directMaterialNet, directLabour, directExpenses, primeCost, factoryOverheads, worksCost, adminOverheads, costOfProduction, sellingOverheads, costOfSales, profitAmount, quotationPrice, perUnit: {...}, workingLines: [...] }`
+* Ensures explicit distinction between:
+  * **Markup on Cost:** `profit = costOfSales * (rate / 100)`
+  * **Margin on Sales:** `profit = costOfSales * (rate / (100 - rate))`
 
-  def parse_stl_mesh(file_bytes_or_path: Union[bytes, str]) -> MeshMetrics:
-      """
-      Computes volume using the discrete divergence theorem:
-      Sum of signed tetrahedra formed by mesh triangles with origin.
-      """
-      ...
+### 3.3 `batch-engine.js`
+* `calculateEBQ(demand, setupCost, holdingCost)` $\to$ `{ ebq, runsPerYear, cycleDays, annualSetupCost, annualHoldingCost, totalInventoryCost, sensitivityRows: [...] }`
+* `buildEBQChartSVG(ebqResult)` $\to$ responsive vector `<svg>` markup plotting Setup Cost, Holding Cost, and Total Cost curves with clear intersection pin at `EBQ`.
+* `evaluateMakeOrBuy(params)` $\to$ `{ batchQty, makeVariablePerUnit, makeAvoidableSetup, opportunityCost, sunkFixedExcluded, totalMakeCost, makePerUnitEffective, vendorUnitPrice, vendorLogistics, totalBuyCost, buyPerUnitEffective, decision: 'MAKE' | 'BUY' | 'INDIFFERENT', savingsInr, indifferenceQty }`
 
-  def estimate_manufacturing_parameters(
-      metrics: MeshMetrics,
-      material_density_g_cm3: float = 1.24,  # Default: PLA
-      infill_percentage: float = 20.0,
-      support_waste_percentage: float = 10.0,
-      layer_height_mm: float = 0.20,
-      print_speed_mm_s: float = 50.0
-  ) -> dict:
-      """
-      Returns calculated net mass (grams), raw material consumed (grams),
-      and estimated machine operational runtime (hours).
-      """
-      ...
-  ```
+### 3.4 `ledger-engine.js`
+* `createEmptyLedger()` $\to$ initialized ledger state (`entries`, `accounts`).
+* `postCreditSale(ledger, { date, quoteId, jobId, customerName, revenueAmount, gstAmount })`
+* `postPaymentReceipt(ledger, { date, customerName, amount, reference })`
+* `computeTAccounts(ledger)` $\to$ debit rows, credit rows, gross sums, `c/d` balancing line, and net balance direction (`Dr.` / `Cr.`) for `Sundry Debtors`, `Sales Revenue`, `Bank / Cash`, and `Output GST`.
+* `computeTrialBalance(tAccounts)` $\to$ `{ rows, totalDebit, totalCredit, isBalanced }`
 
 ---
 
-### 3.2 Hierarchical Cost Engine (`src/cost_engine.py`)
-Encapsulates institutional Cost and Management Accounting rules.
+## 4. Verification Benchmarks (`tests/run_tests.mjs`)
 
-* **Data Models:**
-  ```python
-  from dataclasses import dataclass
-
-  @dataclass
-  class DirectCostInputs:
-      material_cost: float
-      labour_hours: float
-      labour_rate_per_hour: float
-      direct_expenses: float  # e.g., specialized CAD/tooling fees
-
-  @dataclass
-  class OverheadRates:
-      machine_hours: float
-      machine_hour_rate: float        # Factory Overhead absorption
-      admin_overhead_rate_pct: float  # % of Works Cost
-      selling_overhead_rate_pct: float # % of Cost of Production or fixed
-
-  @dataclass
-  class CostSheetSummary:
-      direct_material: float
-      direct_labour: float
-      direct_expenses: float
-      prime_cost: float
-      factory_overheads: float
-      works_cost: float
-      admin_overheads: float
-      cost_of_production: float
-      selling_overheads: float
-      cost_of_sales: float
-      profit_amount: float
-      quotation_price: float
-      pricing_mode: str  # "Markup on Cost" | "Margin on Sales"
-      profit_percentage: float
-  ```
-
-* **Core Functions:**
-  ```python
-  def compile_job_cost_sheet(
-      direct_inputs: DirectCostInputs,
-      overhead_rates: OverheadRates,
-      target_profit_pct: float = 20.0,
-      is_margin_on_sales: bool = False
-  ) -> CostSheetSummary:
-      """
-      Calculates Prime Cost -> Works Cost -> Cost of Production -> Cost of Sales.
-      Applies dual-mode profit computation:
-      If is_margin_on_sales is True: Profit = Cost * (Rate / (100 - Rate))
-      Else: Profit = Cost * (Rate / 100)
-      """
-      ...
-  ```
-
----
-
-### 3.3 Batch Costing & EBQ Optimizer (`src/batch_engine.py`)
-Computes the Economic Batch Quantity and constructs the proof table.
-
-* **Interface:**
-  ```python
-  @dataclass
-  class EBQResult:
-      optimal_batch_size: float
-      annual_demand: float
-      setup_cost_per_batch: float
-      annual_holding_cost_per_unit: float
-      number_of_batches: float
-      annual_setup_cost: float
-      annual_holding_cost: float
-      total_annual_cost: float
-      sensitivity_dataframe: pd.DataFrame
-
-  def calculate_ebq(
-      annual_demand: float,
-      setup_cost: float,
-      holding_cost_per_unit_year: float
-  ) -> EBQResult:
-      """
-      Computes EBQ = sqrt((2 * D * S) / H).
-      Generates sensitivity matrix across 50%, 75%, 100%, 125%, 150%, 200% of EBQ
-      demonstrating that Setup Cost == Holding Cost at EBQ.
-      """
-      ...
-  ```
-
----
-
-### 3.4 Financial Accounting & Ledger Engine (`src/ledger_engine.py`)
-Maintains an in-memory double-entry accounting ledger that registers commercial milestones.
-
-* **Interface:**
-  ```python
-  @dataclass
-  class JournalEntry:
-      entry_id: str
-      timestamp: str
-      debit_account: str
-      credit_account: str
-      amount: float
-      narration: str
-
-  class LedgerAccount:
-      name: str
-      account_type: str  # 'Asset' | 'Liability' | 'Revenue' | 'Expense'
-      debit_entries: list[tuple[str, float]]   # (narration, amount)
-      credit_entries: list[tuple[str, float]]  # (narration, amount)
-      
-      @property
-      def balance(self) -> float: ...
-
-  class AccountingEngine:
-      def __init__(self):
-          self.journal: list[JournalEntry] = []
-          self.accounts: dict[str, LedgerAccount] = {
-              "Sundry Debtors": LedgerAccount("Sundry Debtors", "Asset"),
-              "Sales Revenue": LedgerAccount("Sales Revenue", "Revenue"),
-              "Bank / Cash": LedgerAccount("Bank / Cash", "Asset")
-          }
-
-      def record_order_acceptance(self, job_id: str, customer_name: str, quote_amount: float):
-          """
-          Dr. Sundry Debtors (Customer)
-          Cr. Sales Revenue
-          """
-          ...
-
-      def record_payment_receipt(self, customer_name: str, amount: float):
-          """
-          Dr. Bank / Cash
-          Cr. Sundry Debtors
-          """
-          ...
-  ```
-
----
-
-## 4. UI/UX Workflow & Layout (Streamlit Specification)
-
-The Streamlit interface (`app.py`) is organized into three unified functional stages:
-
-### Tab 1: Geometric Input & Cost Configuration
-* **Input Mode Toggle:** `[📂 Upload 3D CAD File (.STL)]` vs. `[📝 Manual Benchmark Override]`.
-* **CAD Mode View:**
-  * File uploader widget supporting `.stl`.
-  * Display of 3D Part Bounding Box, Volume ($\text{cm}^3$), Net Mass ($\text{g}$), and Estimated Runtime.
-  * Filament/Alloy selection dropdown with editable cost per kilogram.
-* **Manual Mode View (Pre-populated Benchmark):**
-  * One-click selector: *"Apex Printers Custom Order Benchmark"* or *"Custom Industrial Job"*.
-  * Input fields for Direct Materials, Labour Hours, Hourly Wage, Direct Expenses.
-* **Overhead & Markup Controls:**
-  * Machine Hour Rate slider or percentage of direct labour.
-  * Administration & Selling overhead percentages.
-  * Profit Type toggle: `Markup on Cost (%)` vs. `Margin on Selling Price (%)`.
-
-### Tab 2: Job Cost Sheet & EBQ Optimizer
-* **Dynamic Cost Sheet Presentation:**
-  * Formatted tabular statement displaying step-by-step additions.
-  * Visual KPI tiles: **Prime Cost**, **Works Cost**, **Cost of Sales**, **Quotation Price**.
-* **Batch Sizing & EBQ Analyzer:**
-  * Inputs for Annual Repeat Demand ($D$), Batch Setup Cost ($S$), and Unit Holding Cost ($H$).
-  * Metric badge showing calculated $\text{EBQ}$.
-  * Plotly chart & interactive data table illustrating the parabolic cost curves (Setup Cost descending, Holding Cost ascending, Total Cost minimum at $\text{EBQ}$).
-
-### Tab 3: Commercial Quotation & Live Accounting Ledger
-* **Printable / Formal Quote Card:**
-  * Formatted commercial proposal with Job Number, Customer Name, Cost Breakdown, Tax, and Validity Period.
-* **Commercial Action:** `[Confirm & Accept Quotation]`.
-* **Live Double-Entry Financial State:**
-  * Real-time generation of the formal Journal Entry with Dr/Cr verification.
-  * Side-by-side rendered T-Ledger accounts (`Sundry Debtors A/c` and `Sales Revenue A/c`).
-  * Balance confirmation proving total debits equal total credits.
-
----
-
-## 5. Verification & Testing Matrix
-
-| Test Suite | File | Benchmark Standard | Expected Output |
-| :--- | :--- | :--- | :--- |
-| **Mesh Divergence** | `tests/test_geometry.py` | 20x20x20 mm Cube | Exact volume = $8.00\text{ cm}^3 \pm 0.01$ |
-| **Apex Printers Job Sheet** | `tests/test_costing.py` | Module 4 Classroom Exercise | Works Cost = ₹10,500, Final Quote = ₹13,860.00 |
-| **EBQ Mathematical Equivalence** | `tests/test_ebq.py` | Module 4 EBQ Model ($D=10k, S=400, H=2$) | $\text{EBQ} = 2,000$, $\text{Setup Cost} \equiv \text{Holding Cost} = \text{₹}2,000$ |
-| **Double-Entry Equilibrium** | `tests/test_ledger.py` | Credit Sale Transaction | $\sum \text{Debits} \equiv \sum \text{Credits}$ across all ledger accounts |
+| Test Case | Benchmark Source | Expected Verified Assertion |
+| :--- | :--- | :--- |
+| **Calibration Cube Volume** | Analytical $20\text{ mm}$ cube | `volumeCm3 === 8.00`, `surfaceAreaCm2 === 24.00`, `facetCount === 12` |
+| **Mechanical Bracket Volume** | Extruded L-profile geometry | `volumeCm3 === 48.12`, `facetCount === 24` |
+| **Apex Printers Job Sheet** | Module 4 Exercise | Prime `9000`, Works `10500`, Cost of Sales `11550`, Quote `13860.00` |
+| **20% Sales Margin Mode** | Cost Sheet Margin Formula | `costOfSales = 10000` $\implies$ `profit = 2500`, `quote = 12500` |
+| **EBQ Optimization** | Module 4 Model ($D=10\text{k}, S=400, H=2$) | `ebq === 2000`, `setupCost === 2000`, `holdingCost === 2000`, `total === 4000` |
+| **Make-or-Buy Decision** | Differential Cost Model | Accurately ignores sunk fixed OH, counts opportunity cost, computes indifference qty |
+| **Ledger Equilibrium** | Module 1 Double-Entry Rules | `totalDebit === totalCredit` after sale & partial payment; Debtors balance updates cleanly |

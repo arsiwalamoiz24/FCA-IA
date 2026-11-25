@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step 1: CAD &amp; Job Inputs — JobShop Quote Engine</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231E3A5F'><rect width='24' height='24' rx='4'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='%23FAF9F6' font-family='monospace' font-size='12' font-weight='bold'>JS</text></svg>">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+
+  <main class="page-container">
+    <div id="job-status-bar" class="job-status-bar"></div>
+
+    <div class="page-intro">
+      <div>
+        <h2>Step 1 &mdash; Geometry Ingestion &amp; Process Inputs</h2>
+        <p>Upload a 3D CAD mesh (.STL) to derive volume, mass, and machine time, or enter manual textbook benchmark figures directly.</p>
+      </div>
+      <div class="toolbar-actions">
+        <div class="segmented" role="group" aria-label="Input Mode">
+          <button type="button" id="btn-mode-stl" class="active">CAD STL Upload</button>
+          <button type="button" id="btn-mode-manual">Manual Textbook Mode</button>
+        </div>
+        <button type="button" class="btn" data-preset="apex_printers">Load Apex Printers Benchmark</button>
+      </div>
+    </div>
+
+    <div class="grid-2-wide-right">
+      <!-- LEFT COLUMN: CAD VIEWER OR MANUAL REFERENCE -->
+      <div>
+        <div id="panel-stl-left" class="card">
+          <div class="card-header">
+            <h3>3D CAD Geometry (.STL)</h3>
+            <span class="badge badge-navy">STLLoader + Divergence Theorem</span>
+          </div>
+          <div class="card-body">
+            <div id="stl-dropzone" class="dropzone" tabindex="0">
+              <div class="dropzone-title">Drop an .STL file here or click to browse</div>
+              <div class="dropzone-sub">Supports Binary and ASCII stereolithography CAD files</div>
+              <input type="file" id="stl-file-input" accept=".stl,.STL" style="display:none">
+            </div>
+
+            <div class="sample-strip">
+              <span>Sample CAD parts:</span>
+              <button type="button" class="btn btn-sm" data-sample-stl="mechanical_bracket.stl">L-Bracket (48.12 cm&sup3;)</button>
+              <button type="button" class="btn btn-sm" data-sample-stl="cnc_flange_housing.stl">CNC Flange (28.57 cm&sup3;)</button>
+              <button type="button" class="btn btn-sm" data-sample-stl="calibration_cube.stl">20mm Cube (8.00 cm&sup3;)</button>
+            </div>
+
+            <div id="stl-error" class="callout callout-rust" style="display:none;"></div>
+
+            <div id="stl-viewport" class="viewport-box">
+              <div class="viewport-caption">Drag to orbit &bull; Scroll to zoom &bull; Right-drag to pan</div>
+            </div>
+
+            <div class="table-wrap" style="margin-top: 14px;">
+              <table class="sheet">
+                <thead>
+                  <tr>
+                    <th>Derived Mesh Property</th>
+                    <th class="num">Measured Value</th>
+                  </tr>
+                </thead>
+                <tbody id="mesh-metrics-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="panel-manual-left" class="card" style="display:none;">
+          <div class="card-header">
+            <h3>Manual Textbook Audit Mode</h3>
+            <span class="badge badge-forest">Direct Entry</span>
+          </div>
+          <div class="card-body">
+            <div class="callout">
+              Use Manual Input Mode when verifying against plain numerical cost accounting problems (such as <strong>R. L. Gupta</strong>, <strong>M. N. Arora</strong>, or classroom exercises) where Direct Material, Direct Labour, and Machine Hours are already specified.
+            </div>
+            <div class="field">
+              <label>Quick Classroom &amp; Textbook Presets</label>
+              <div class="toolbar-actions" style="margin-top: 4px;">
+                <button type="button" class="btn" data-preset="apex_printers">Apex Printers (1,000 Brochures &rarr; ₹13,860)</button>
+                <button type="button" class="btn" data-preset="vibrant_threads">Vibrant Threads (20% Sales Margin &rarr; ₹2 Cr)</button>
+              </div>
+            </div>
+            <div class="kpi-grid-3" style="margin-top: 16px;">
+              <div class="kpi-tile">
+                <div class="kpi-label">Prime Cost</div>
+                <div class="kpi-value" id="man-preview-prime">₹0.00</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Works Cost</div>
+                <div class="kpi-value" id="man-preview-works">₹0.00</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Est. Quote</div>
+                <div class="kpi-value" id="man-preview-quote">₹0.00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: JOB ORDER META + PROCESS PHYSICS -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Job Order Identification</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field">
+                <label for="inp-job-id">Job Order Reference</label>
+                <input type="text" id="inp-job-id">
+              </div>
+              <div class="field">
+                <label for="inp-customer">Customer / Party Name</label>
+                <input type="text" id="inp-customer">
+              </div>
+              <div class="field">
+                <label for="inp-machine-center">Workstation / Machine Center</label>
+                <input type="text" id="inp-machine-center">
+              </div>
+              <div class="field">
+                <label for="inp-qty">Order Quantity (Units)</label>
+                <input type="number" id="inp-qty" min="1" step="1">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CAD PROCESS INPUTS -->
+        <div id="panel-cad-process" class="card">
+          <div class="card-header">
+            <h3>Manufacturing Process &amp; Cost Drivers</h3>
+            <div class="segmented" role="group" aria-label="Workshop Process">
+              <button type="button" id="btn-proc-print" class="active">3D Printing</button>
+              <button type="button" id="btn-proc-cnc">CNC Machining</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="fields-printing">
+              <div class="field">
+                <label for="sel-print-material">Polymer / Resin Material</label>
+                <select id="sel-print-material"></select>
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="inp-print-density">Material Density (g/cm&sup3;)</label>
+                  <input type="number" id="inp-print-density" step="0.01" min="0.1">
+                </div>
+                <div class="field">
+                  <label for="inp-print-rate">Filament / Resin Rate (₹/kg)</label>
+                  <input type="number" id="inp-print-rate" step="10" min="0">
+                </div>
+                <div class="field">
+                  <label for="inp-infill">Infill Density (%)</label>
+                  <input type="number" id="inp-infill" step="5" min="5" max="100">
+                </div>
+                <div class="field">
+                  <label for="inp-support">Support &amp; Purge Waste (%)</label>
+                  <input type="number" id="inp-support" step="1" min="0" max="100">
+                </div>
+                <div class="field">
+                  <label for="inp-dep-rate">Print Speed (cm&sup3;/hr)</label>
+                  <input type="number" id="inp-dep-rate" step="1" min="1">
+                </div>
+                <div class="field">
+                  <label for="inp-print-setup">Slicing &amp; Bed Prep Setup (hrs)</label>
+                  <input type="number" id="inp-print-setup" step="0.1" min="0">
+                </div>
+              </div>
+            </div>
+
+            <div id="fields-cnc" style="display:none;">
+              <div class="field">
+                <label for="sel-cnc-material">Raw Stock Billet Material</label>
+                <select id="sel-cnc-material"></select>
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="inp-cnc-density">Alloy Density (g/cm&sup3;)</label>
+                  <input type="number" id="inp-cnc-density" step="0.01" min="0.1">
+                </div>
+                <div class="field">
+                  <label for="inp-cnc-rate">Billet Stock Rate (₹/kg)</label>
+                  <input type="number" id="inp-cnc-rate" step="10" min="0">
+                </div>
+                <div class="field">
+                  <label for="inp-cnc-scrap">Chip Scrap Recovery (₹/kg)</label>
+                  <input type="number" id="inp-cnc-scrap" step="5" min="0">
+                </div>
+                <div class="field">
+                  <label for="inp-cnc-allowance">Stock Billet Allowance (mm)</label>
+                  <input type="number" id="inp-cnc-allowance" step="1" min="0">
+                </div>
+                <div class="field">
+                  <label for="inp-cnc-mrr">Metal Removal Rate (cm&sup3;/hr)</label>
+                  <input type="number" id="inp-cnc-mrr" step="1" min="1">
+                </div>
+                <div class="field">
+                  <label for="inp-cnc-setup">CAM &amp; Fixture Setup (hrs)</label>
+                  <input type="number" id="inp-cnc-setup" step="0.1" min="0">
+                </div>
+              </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border-light); margin: 12px 0;">
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="inp-labour-hrs">Operator Labour Hours (Total Job)</label>
+                <input type="number" id="inp-labour-hrs" step="0.5" min="0">
+              </div>
+              <div class="field">
+                <label for="inp-labour-rate">Operator Wage Rate (₹/hr)</label>
+                <input type="number" id="inp-labour-rate" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="inp-direct-exp">Direct Expenses / Tooling (₹)</label>
+                <input type="number" id="inp-direct-exp" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="inp-mhr">Machine Hour Rate — MHR (₹/hr)</label>
+                <input type="number" id="inp-mhr" step="5" min="0">
+              </div>
+            </div>
+
+            <div class="kpi-grid" style="margin-top: 10px;">
+              <div class="kpi-tile">
+                <div class="kpi-label">Total Stock Mass</div>
+                <div class="kpi-value" id="out-mass-kg">0.000 kg</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Direct Material</div>
+                <div class="kpi-value" id="out-mat-cost">₹0.00</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Machine Time</div>
+                <div class="kpi-value" id="out-mach-hrs">0.00 hrs</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Scrap Credit</div>
+                <div class="kpi-value" id="out-scrap-credit">₹0.00</div>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top: 8px;">
+              <label>Step-by-Step Derivation Working</label>
+              <div id="cad-working-box" class="working-box"></div>
+            </div>
+
+            <div class="section-actions">
+              <span class="muted-note">Values auto-sync to your Job Card &amp; Cost Sheet.</span>
+              <a href="costing.html" class="btn btn-primary">Open Job Card &amp; Cost Sheet &rarr;</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL TEXTBOOK PROCESS INPUTS -->
+        <div id="panel-manual-process" class="card" style="display:none;">
+          <div class="card-header">
+            <h3>Manual Direct Costs &amp; Machine Hours</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field">
+                <label for="man-qty">Job Batch Quantity (Units)</label>
+                <input type="number" id="man-qty" min="1" step="1">
+              </div>
+              <div class="field">
+                <label for="man-dm">Direct Materials Consumed (₹)</label>
+                <input type="number" id="man-dm" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="man-scrap">Scrap Realized Credit (₹)</label>
+                <input type="number" id="man-scrap" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="man-de">Direct Expenses (₹)</label>
+                <input type="number" id="man-de" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="man-dl-hrs">Direct Labour Hours</label>
+                <input type="number" id="man-dl-hrs" step="1" min="0">
+              </div>
+              <div class="field">
+                <label for="man-dl-rate">Labour Wage Rate (₹/hr)</label>
+                <input type="number" id="man-dl-rate" step="1" min="0">
+              </div>
+              <div class="field">
+                <label for="man-mach-hrs">Machine Hours</label>
+                <input type="number" id="man-mach-hrs" step="0.5" min="0">
+              </div>
+              <div class="field">
+                <label for="man-mhr">Machine Hour Rate (₹/hr)</label>
+                <input type="number" id="man-mhr" step="5" min="0">
+              </div>
+            </div>
+
+            <div class="section-actions">
+              <span class="muted-note">Configure overheads and profit on the next page.</span>
+              <a href="costing.html" class="btn btn-primary">Open Job Card &amp; Cost Sheet &rarr;</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="assets/vendor/three.min.js"></script>
+  <script src="assets/vendor/STLLoader.js"></script>
+  <script src="assets/vendor/OrbitControls.js"></script>
+  <script src="js/sample-models-data.js"></script>
+  <script src="js/geometry-engine.js"></script>
+  <script src="js/cost-engine.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/pages/page-input.js"></script>
+</body>
+</html>

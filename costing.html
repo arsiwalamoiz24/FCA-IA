@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step 2: Job Card &amp; Cost Sheet — JobShop Quote Engine</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231E3A5F'><rect width='24' height='24' rx='4'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='%23FAF9F6' font-family='monospace' font-size='12' font-weight='bold'>JS</text></svg>">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+
+  <main class="page-container">
+    <div id="job-status-bar" class="job-status-bar"></div>
+
+    <div class="page-intro">
+      <div>
+        <h2>Step 2 &mdash; Job Card &amp; Hierarchical Job Cost Sheet</h2>
+        <p>Accumulates Prime Cost, Works Cost, Cost of Production, Cost of Sales, and Markup / Margin pricing with line-by-line workings.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" class="btn" data-preset="apex_printers">Apex Printers Benchmark</button>
+        <button type="button" class="btn" data-preset="vibrant_threads">Vibrant Threads (20% Sales Margin)</button>
+        <button type="button" class="btn btn-primary" id="btn-print-costing">Print / Save PDF</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-tile">
+        <div class="kpi-label">Prime Cost</div>
+        <div class="kpi-value" id="kpi-prime">₹0.00</div>
+        <div class="kpi-sub">DM + DL + Direct Exp</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Works / Factory Cost</div>
+        <div class="kpi-value" id="kpi-works">₹0.00</div>
+        <div class="kpi-sub">Prime + Factory OH &minus; Scrap</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Cost of Sales</div>
+        <div class="kpi-value" id="kpi-total-cost">₹0.00</div>
+        <div class="kpi-sub">All absorbed overheads</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Final Quotation Price</div>
+        <div class="kpi-value" id="kpi-quote">₹0.00</div>
+        <div class="kpi-sub" id="kpi-unit-quote">₹0.00 / unit</div>
+      </div>
+    </div>
+
+    <!-- JOB CARD HEADER RECORD -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Workshop Job Card Record</h3>
+        <span class="badge">Specific Order Costing &bull; M4</span>
+      </div>
+      <div class="card-body">
+        <div id="job-card-summary" class="job-card-meta"></div>
+
+        <div class="form-grid-3 no-print">
+          <div class="field">
+            <label for="jc-job-id">Job Order ID</label>
+            <input type="text" id="jc-job-id">
+          </div>
+          <div class="field">
+            <label for="jc-customer">Customer Name</label>
+            <input type="text" id="jc-customer">
+          </div>
+          <div class="field">
+            <label for="jc-part">Component / Description</label>
+            <input type="text" id="jc-part">
+          </div>
+          <div class="field">
+            <label for="jc-mrn">Material Requisition Note (MRN)</label>
+            <input type="text" id="jc-mrn">
+          </div>
+          <div class="field">
+            <label for="jc-tt">Labour Time Ticket (TT)</label>
+            <input type="text" id="jc-tt">
+          </div>
+          <div class="field">
+            <label for="jc-machine">Machine Allocation</label>
+            <input type="text" id="jc-machine">
+          </div>
+          <div class="field">
+            <label for="jc-date">Job Card Date</label>
+            <input type="date" id="jc-date">
+          </div>
+          <div class="field">
+            <label for="jc-qty">Batch Quantity (Units)</label>
+            <input type="number" id="jc-qty" min="1" step="1">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2-wide-left">
+      <!-- LEFT: HIERARCHICAL COST SHEET STATEMENT -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Statement of Job Cost Sheet</h3>
+            <span class="badge badge-navy">Cost Hierarchy &bull; M3</span>
+          </div>
+          <div class="card-body">
+            <div class="table-wrap">
+              <table class="sheet">
+                <thead>
+                  <tr>
+                    <th>Particulars &amp; Cost Working</th>
+                    <th class="num">Total Job (₹)</th>
+                    <th class="num">Per Unit (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="cost-sheet-tbody"></tbody>
+              </table>
+            </div>
+            <div id="profit-audit-note" class="callout callout-forest" style="margin-top: 14px; margin-bottom: 0;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: COST & OVERHEAD PARAMETERS -->
+      <div class="no-print">
+        <div class="card">
+          <div class="card-header">
+            <h3>Direct Costs &amp; Overhead Absorption Controls</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field">
+                <label for="cs-dm">Direct Materials (₹)</label>
+                <input type="number" id="cs-dm" step="10" min="0">
+              </div>
+              <div class="field">
+                <label for="cs-scrap">Recoverable Scrap Credit (₹)</label>
+                <input type="number" id="cs-scrap" step="5" min="0">
+              </div>
+              <div class="field">
+                <label for="cs-dl-hrs">Direct Labour Hours</label>
+                <input type="number" id="cs-dl-hrs" step="0.5" min="0">
+              </div>
+              <div class="field">
+                <label for="cs-dl-rate">Labour Hourly Rate (₹/hr)</label>
+                <input type="number" id="cs-dl-rate" step="5" min="0">
+              </div>
+              <div class="field">
+                <label for="cs-de">Direct Expenses (₹)</label>
+                <input type="number" id="cs-de" step="10" min="0">
+              </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border-light); margin: 10px 0;">
+
+            <div class="field">
+              <label for="cs-foh-mode">Factory Overhead Absorption Basis</label>
+              <select id="cs-foh-mode">
+                <option value="mhr">Machine Hour Rate (Machine Hrs &times; MHR)</option>
+                <option value="pct_dl">Percentage of Direct Labour (%)</option>
+                <option value="fixed">Fixed Factory Overhead Amount (₹)</option>
+              </select>
+            </div>
+            <div id="foh-mhr-fields" class="form-grid">
+              <div class="field">
+                <label for="cs-mach-hrs">Machine Hours</label>
+                <input type="number" id="cs-mach-hrs" step="0.5" min="0">
+              </div>
+              <div class="field">
+                <label for="cs-mhr">Machine Hour Rate (₹/hr)</label>
+                <input type="number" id="cs-mhr" step="5" min="0">
+              </div>
+            </div>
+            <div id="foh-pct-field" class="field" style="display:none;">
+              <label for="cs-foh-pct">Factory Overhead (% of Direct Labour)</label>
+              <input type="number" id="cs-foh-pct" step="1" min="0">
+            </div>
+            <div id="foh-fixed-field" class="field" style="display:none;">
+              <label for="cs-foh-fixed">Fixed Factory Overheads (₹)</label>
+              <input type="number" id="cs-foh-fixed" step="50" min="0">
+            </div>
+
+            <div class="form-grid" style="margin-top: 6px;">
+              <div>
+                <div class="field">
+                  <label for="cs-aoh-mode">Admin Overhead Basis</label>
+                  <select id="cs-aoh-mode">
+                    <option value="pct_works">% of Works Cost</option>
+                    <option value="fixed">Fixed Amount (₹)</option>
+                  </select>
+                </div>
+                <div id="aoh-pct-field" class="field">
+                  <label for="cs-aoh-pct">Admin OH (%)</label>
+                  <input type="number" id="cs-aoh-pct" step="1" min="0">
+                </div>
+                <div id="aoh-fixed-field" class="field" style="display:none;">
+                  <label for="cs-aoh-fixed">Admin OH Fixed (₹)</label>
+                  <input type="number" id="cs-aoh-fixed" step="50" min="0">
+                </div>
+              </div>
+
+              <div>
+                <div class="field">
+                  <label for="cs-soh-mode">Selling Overhead Basis</label>
+                  <select id="cs-soh-mode">
+                    <option value="pct_cop">% of Cost of Production</option>
+                    <option value="pct_works">% of Works Cost</option>
+                    <option value="fixed">Fixed Amount (₹)</option>
+                  </select>
+                </div>
+                <div id="soh-pct-field" class="field">
+                  <label for="cs-soh-pct">Selling OH (%)</label>
+                  <input type="number" id="cs-soh-pct" step="1" min="0">
+                </div>
+                <div id="soh-fixed-field" class="field" style="display:none;">
+                  <label for="cs-soh-fixed">Selling OH Fixed (₹)</label>
+                  <input type="number" id="cs-soh-fixed" step="50" min="0">
+                </div>
+              </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border-light); margin: 10px 0;">
+
+            <div class="field">
+              <label>Profit Basis</label>
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div class="segmented">
+                  <button type="button" id="btn-profit-markup" class="active">Markup on Cost (%)</button>
+                  <button type="button" id="btn-profit-margin">Margin on Sales (%)</button>
+                </div>
+                <input type="number" id="cs-profit-pct" step="1" min="0" max="99" style="width: 110px;">
+              </div>
+              <span class="field-hint">Markup adds r% to Cost. Margin solves Price = Cost &divide; (1 &minus; r%).</span>
+            </div>
+
+            <div class="section-actions">
+              <a href="index.html" class="btn">&larr; Edit CAD / Inputs</a>
+              <div style="display:flex; gap:8px;">
+                <a href="batch.html" class="btn">EBQ &amp; Make/Buy &rarr;</a>
+                <a href="ledger.html" class="btn btn-primary">Quotation &amp; Ledger &rarr;</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/cost-engine.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/pages/page-costing.js"></script>
+</body>
+</html>

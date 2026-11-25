@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step 3: EBQ &amp; Make-or-Buy — JobShop Quote Engine</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231E3A5F'><rect width='24' height='24' rx='4'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='%23FAF9F6' font-family='monospace' font-size='12' font-weight='bold'>JS</text></svg>">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+
+  <main class="page-container">
+    <div id="job-status-bar" class="job-status-bar"></div>
+
+    <div class="page-intro">
+      <div>
+        <h2>Step 3 &mdash; Batch Costing (EBQ) &amp; Make-or-Buy Decision</h2>
+        <p>Optimize repeat batch production quantities to minimize setup vs. holding costs, and evaluate in-house production against vendor outsourcing.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" class="btn" id="btn-load-ebq-bench">Load EBQ Benchmark (10k / ₹400 / ₹2)</button>
+        <button type="button" class="btn" id="btn-sync-from-costsheet">Pull Variable Cost from Cost Sheet</button>
+        <button type="button" class="btn btn-primary" id="btn-print-batch">Print / Save PDF</button>
+      </div>
+    </div>
+
+    <!-- PART A: ECONOMIC BATCH QUANTITY -->
+    <div class="kpi-grid">
+      <div class="kpi-tile">
+        <div class="kpi-label">Optimal Batch Size (EBQ)</div>
+        <div class="kpi-value" id="kpi-ebq">0 units</div>
+        <div class="kpi-sub">Minimizes setup + carrying</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Production Runs / Year</div>
+        <div class="kpi-value" id="kpi-batches">0.00</div>
+        <div class="kpi-sub">Annual Demand &divide; EBQ</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Cycle Interval</div>
+        <div class="kpi-value" id="kpi-cycle">0 days</div>
+        <div class="kpi-sub">Days between setups</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Min. Total Annual Cost</div>
+        <div class="kpi-value" id="kpi-ebq-cost">₹0.00</div>
+        <div class="kpi-sub">Setup Cost &equiv; Holding Cost</div>
+      </div>
+    </div>
+
+    <div class="grid-2-wide-right">
+      <div class="card">
+        <div class="card-header">
+          <h3>EBQ Parameters &amp; Formula Proof</h3>
+          <span class="badge">Module 4 &bull; Batch Costing</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label for="ebq-demand">Annual Repeat Demand &mdash; D (Units/Year)</label>
+            <input type="number" id="ebq-demand" min="1" step="100">
+          </div>
+          <div class="field">
+            <label for="ebq-setup">Machine Setup Cost per Batch &mdash; S (₹/Run)</label>
+            <input type="number" id="ebq-setup" min="1" step="25">
+            <span class="field-hint">Includes CAD verification, fixture clamping, first-article test, and nozzle/tool prep.</span>
+          </div>
+          <div class="field">
+            <label for="ebq-holding">Inventory Carrying Cost &mdash; H (₹/Unit/Year)</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="number" id="ebq-holding" min="0.1" step="0.5">
+              <button type="button" class="btn btn-sm" id="btn-suggest-holding" style="white-space:nowrap;">15% of Unit COP</button>
+            </div>
+            <span class="field-hint">Includes storage space, capital lockup interest, insurance, and obsolescence.</span>
+          </div>
+
+          <div id="ebq-working" class="working-box" style="margin-top: 12px;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Annual Setup Cost vs. Carrying Cost Curve</h3>
+        </div>
+        <div class="card-body">
+          <div id="ebq-chart-container"></div>
+          <div class="chart-legend">
+            <span><span class="legend-swatch" style="background:#1E3A5F;"></span>Annual Setup Cost</span>
+            <span><span class="legend-swatch" style="background:#23533A;"></span>Annual Holding Cost</span>
+            <span><span class="legend-swatch" style="background:#1F2421;"></span>Total Annual Inventory Cost</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Batch Size Sensitivity Proof Table</h3>
+        <span class="badge badge-forest">Equilibrium Check at 100% EBQ</span>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="sheet">
+            <thead>
+              <tr>
+                <th>Scenario Multiple</th>
+                <th class="num">Batch Size (Q)</th>
+                <th class="num">Batches / Year</th>
+                <th class="num">Annual Setup Cost (₹)</th>
+                <th class="num">Annual Holding Cost (₹)</th>
+                <th class="num">Total Annual Cost (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="ebq-sensitivity-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PART B: MAKE-OR-BUY DECISION ANALYSIS -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Make-or-Buy Differential Cost Analysis</h3>
+        <span class="badge badge-navy">Relevant Costing &bull; Module 3 / 4</span>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="no-print">
+            <div class="form-grid">
+              <div class="field">
+                <label for="mob-qty">Order / Batch Quantity</label>
+                <input type="number" id="mob-qty" min="1" step="10">
+              </div>
+              <div class="field">
+                <label for="mob-var-cost">In-House Variable Cost / Unit (₹)</label>
+                <input type="number" id="mob-var-cost" min="0" step="5">
+              </div>
+              <div class="field">
+                <label for="mob-setup">Avoidable Batch Setup / Tooling (₹)</label>
+                <input type="number" id="mob-setup" min="0" step="100">
+              </div>
+              <div class="field">
+                <label for="mob-opp">Opportunity Cost (Forgone Contribution ₹)</label>
+                <input type="number" id="mob-opp" min="0" step="500">
+              </div>
+              <div class="field">
+                <label for="mob-vendor-price">External Vendor Price / Unit (₹)</label>
+                <input type="number" id="mob-vendor-price" min="0" step="5">
+              </div>
+              <div class="field">
+                <label for="mob-vendor-freight">Vendor Inbound Freight &amp; QC (₹)</label>
+                <input type="number" id="mob-vendor-freight" min="0" step="100">
+              </div>
+            </div>
+            <div class="field">
+              <label for="mob-sunk">Fixed Factory Rent / Sunk Overheads (Excluded from Decision ₹)</label>
+              <input type="number" id="mob-sunk" min="0" step="500">
+              <span class="field-hint">Committed fixed costs remain unchanged whether made internally or outsourced.</span>
+            </div>
+          </div>
+
+          <div>
+            <div id="mob-verdict-banner" class="callout"></div>
+            <div class="table-wrap">
+              <table class="sheet">
+                <thead>
+                  <tr>
+                    <th>Relevant Cost Element</th>
+                    <th class="num">Make In-House (₹)</th>
+                    <th class="num">Buy / Outsource (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="mob-table-body"></tbody>
+              </table>
+            </div>
+            <p id="mob-sunk-note" class="muted-note" style="margin-top: 8px;"></p>
+          </div>
+        </div>
+
+        <div class="section-actions">
+          <a href="costing.html" class="btn">&larr; Back to Job Cost Sheet</a>
+          <a href="ledger.html" class="btn btn-primary">Generate Quotation &amp; Post Ledger &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/cost-engine.js"></script>
+  <script src="js/batch-engine.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/pages/page-batch.js"></script>
+</body>
+</html>
